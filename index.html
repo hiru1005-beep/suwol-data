@@ -40,7 +40,7 @@ input[type=checkbox]{width:20px;height:20px}
   <h1>우리 반 데이터 보기</h1>
   <div class="bar">
     <button id="bClass" class="on">우리 반</button>
-    <button id="bPractice">연습용 200명</button>
+    <button id="bPractice" hidden>연습용 200명</button>
     <button id="bReload">새로고침</button>
   </div>
   <p class="meta" id="meta">불러오는 중…</p>
@@ -268,6 +268,8 @@ const PRACTICE = `유튜브(분),구독채널(개),수면(시간),운동(분),�
 const qsUrl = new URLSearchParams(location.search).get("sheet");
 const SRC = SHEET_CSV_URL || qsUrl || "";
 let mode = "class", data = null, sel = null;
+const TEACHER = new URLSearchParams(location.search).has("200");
+if (TEACHER) document.getElementById("bPractice").hidden = false;
 
 function parseCSV(t){
   t = t.replace(/^﻿/,"");
