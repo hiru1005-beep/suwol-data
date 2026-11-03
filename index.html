@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>우리 반 데이터 보기</title>
+<style>
+:root{
+  --bg:#F5F4EE; --card:#FFFFFF; --ink:#1E2A44; --soft:#5A6378; --line:#DDDCD2;
+  --dot:#2F6FA8; --accent:#D9662B; --chip:#E4ECF5;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+  -webkit-text-size-adjust:100%}
+.wrap{max-width:760px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:22px;margin:4px 0 12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+button{font:inherit;border:1.5px solid var(--line);background:var(--card);color:var(--ink);
+  border-radius:999px;padding:9px 14px;font-size:15px;cursor:pointer}
+button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.meta{font-size:14px;color:var(--soft);margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px}
+.hint{font-size:15px;color:var(--soft);margin:12px 2px}
+svg text{font-family:inherit}
+.cell{cursor:pointer}
+.cell:hover rect.bgc{fill:#EEF3F9}
+#detail{margin-top:14px}
+.dhead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.dhead b{font-size:17px;min-width:0}
+.dhead button{white-space:nowrap;flex-shrink:0}
+.msg{background:#FFF4EC;border:1px solid #F2C9AE;border-radius:12px;padding:12px;font-size:15px;margin-bottom:12px}
+label.tog{display:flex;align-items:center;gap:8px;font-size:15px;margin:8px 2px}
+input[type=checkbox]{width:20px;height:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>우리 반 데이터 보기</h1>
+  <div class="bar">
+    <button id="bClass" class="on">우리 반</button>
+    <button id="bPractice">연습용 200명</button>
+    <button id="bReload">새로고침</button>
+  </div>
+  <p class="meta" id="meta">불러오는 중…</p>
+  <div id="msg"></div>
+  <div class="card"><svg id="mx" width="100%" role="img" aria-label="산점도 행렬"></svg></div>
+  <p class="hint">칸을 누르면 그 두 질문만 크게 볼 수 있어요. 점 하나가 한 사람이에요.</p>
+  <div id="detail" hidden>
+    <div class="card">
+      <div class="dhead"><b id="dTitle"></b><button id="dClose">닫기</button></div>
+      <label class="tog"><input type="checkbox" id="bubble"> 겹친 점은 크게 (같은 답을 한 사람 수만큼)</label>
+      <svg id="big" width="100%" role="img" aria-label="점 그래프"></svg>
+      <p class="meta" id="dNote"></p>
+    </div>
+  </div>
+</div>
+<script>
+/* ===== 여기 한 줄만 바꾸면 됩니다 =====
+   구글 시트 [파일 → 공유 → 웹에 게시]에서
+   「엔트리용」 탭 + 「쉼표로 구분된 값(.csv)」으로 게시한 주소를 따옴표 안에 붙여넣기 */
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQnMsh7DID46FY58SrsN-VsEe01MaIQ93dIlF__DHAr72k9GXFl4boOnTZRuLaW0H50YRe9P-1VrXmg/pub?gid=1496853536&single=true&output=csv";
+/* ===================================== */
+
+const PRACTICE = `유튜브(분),구독채널(개),수면(시간),운동(분),기분(1~5)
+105,31,8.8,240,3
+240,13,8.2,130,4
+120,23,8.0,170,3
+145,11,8.0,200,4
+135,22,8.2,0,3
+100,19,7.9,130,3
+140,21,8.5,170,4
+135,14,7.7,30,2
+55,11,8.7,60,3
+45,12,8.4,220,3
+125,16,8.6,100,4
+75,17,8.5,80,3
+90,16,8.5,310,3
+100,21,8.4,110,3
+75,10,7.8,200,2
+0,9,8.8,320,4
+105,21,8.4,10,2
+65,15,9.1,260,5
+180,13,8.2,40,4
+135,20,7.4,100,3
+30,0,9.1,200,4
+215,22,6.8,100,4
+155,17,7.8,20,3
+180,26,8.0,230,3
+100,8,7.2,180,4
+185,24,7.3,250,3
+105,24,7.5,30,4
+215,26,7.5,100,4
+190,18,6.7,130,3
+150,19,7.5,120,3
+80,21,8.4,110,3
+155,17,8.2,240,4
+155,27,6.9,140,3
+25,20,8.6,240,3
+215,20,7.3,190,5
+185,29,7.8,140,4
+135,28,7.6,160,3
+125,8,8.7,220,4
+65,14,9.7,100,2
+30,5,8.9,250,2
+90,17,8.5,300,4
+110,20,8.1,90,3
+150,19,7.3,230,4
+155,10,8.4,120,3
+200,23,6.7,20,4
+70,13,7.7,180,4
+80,6,8.6,0,4
+160,20,8.6,60,4
+85,15,7.9,290,3
+100,21,9.2,110,2
+170,21,8.2,20,3
+185,33,7.3,160,5
+35,7,8.2,240,3
+95,21,7.9,220,4
+210,14,7.3,210,3
+280,35,7.3,180,4
+135,12,7.9,240,4
+145,7,8.0,110,4
+125,23,7.8,80,2
+150,22,6.5,40,2
+180,27,7.3,90,4
+135,23,8.3,230,2
+100,22,8.3,120,3
+125,10,7.1,130,4
+150,25,7.2,40,3
+135,13,7.4,100,3
+10,20,8.2,30,3
+105,12,7.1,190,4
+145,8,8.4,100,4
+170,19,6.9,200,3
+85,21,8.8,70,4
+130,22,7.7,150,3
+120,19,8.0,30,3
+75,9,8.9,110,2
+185,24,5.6,170,3
+110,16,7.1,220,3
+230,34,6.3,240,3
+200,28,8.2,290,3
+20,19,7.9,170,3
+155,21,7.5,80,4
+130,21,7.2,300,4
+180,15,6.9,120,5
+125,22,6.6,240,5
+110,24,7.4,190,4
+100,18,8.2,140,3
+160,32,7.7,160,3
+20,16,8.5,230,5
+45,7,7.5,120,4
+75,19,8.6,50,1
+105,15,8.2,70,2
+155,22,8.4,160,4
+125,26,8.4,80,2
+90,19,7.6,160,3
+140,33,7.2,190,4
+90,9,8.0,0,3
+150,17,7.7,230,3
+115,13,7.5,80,2
+115,18,7.6,150,3
+130,25,7.0,160,3
+200,24,8.1,130,5
+110,15,8.2,200,4
+0,10,9.0,10,4
+85,11,8.6,110,3
+50,6,8.2,220,4
+110,17,7.9,330,5
+10,12,8.0,130,3
+185,17,6.7,110,3
+125,11,7.1,80,2
+65,19,8.0,260,4
+100,10,8.1,30,3
+195,19,7.0,300,4
+135,21,6.9,110,3
+110,15,7.3,210,4
+120,22,8.2,140,3
+115,20,7.8,170,3
+60,14,7.3,180,4
+105,15,8.8,200,4
+30,19,8.7,130,4
+140,21,8.4,100,3
+80,18,9.2,0,3
+90,19,8.9,70,4
+55,10,9.1,140,1
+55,6,8.4,60,3
+35,18,7.0,250,3
+155,22,7.1,20,3
+230,28,6.6,190,4
+70,22,8.4,170,3
+175,20,6.7,80,4
+135,8,7.6,180,4
+110,29,8.0,150,3
+100,27,8.0,230,5
+200,25,9.0,270,3
+115,28,8.0,190,2
+90,10,7.7,50,2
+65,18,9.2,240,3
+155,12,7.5,210,2
+160,27,7.4,290,4
+190,25,5.1,150,4
+80,16,8.8,80,4
+45,16,8.6,70,3
+140,14,8.4,120,3
+50,10,7.6,250,5
+125,14,8.2,10,2
+0,8,8.6,180,4
+80,5,8.4,70,2
+115,26,8.2,140,3
+140,27,6.3,0,4
+125,17,7.5,190,3
+145,12,7.4,100,4
+35,19,8.6,140,4
+70,12,8.5,90,4
+95,8,8.3,100,3
+120,20,9.0,90,3
+105,19,9.5,110,3
+155,25,6.6,200,2
+70,12,7.8,280,5
+100,20,8.9,280,5
+135,25,7.0,170,3
+45,18,8.5,140,2
+100,14,8.4,250,3
+100,12,8.0,160,2
+155,30,7.8,50,3
+115,17,7.1,120,5
+125,13,7.9,150,3
+160,28,6.8,120,2
+75,4,8.9,240,3
+25,11,9.1,180,4
+35,12,8.0,100,3
+165,19,7.4,70,3
+105,16,7.6,170,3
+210,29,7.2,50,2
+135,15,8.2,250,4
+95,15,8.1,150,3
+135,16,7.8,120,4
+95,18,8.1,140,4
+110,13,8.2,110,3
+55,0,8.6,50,3
+90,7,8.1,140,4
+145,22,6.1,120,4
+140,22,7.3,210,5
+120,8,8.0,220,2
+85,20,8.6,230,4
+190,30,7.4,90,2
+70,22,7.7,110,2
+95,16,7.6,230,4
+180,26,7.4,80,3
+155,18,8.0,180,4
+85,2,8.1,160,5
+75,9,7.2,180,4
+125,20,7.0,150,2
+65,13,7.8,190,3
+0,10,8.7,150,2
+30,20,8.2,0,4
+15,8,8.8,200,4
+65,4,8.7,280,4
+115,24,7.5,110,3
+105,15,7.9,270,5
+65,24,8.0,200,3
+155,22,7.7,50,3
+30,21,9.0,0,3`;
+
+const qsUrl = new URLSearchParams(location.search).get("sheet");
+const SRC = SHEET_CSV_URL || qsUrl || "";
+let mode = "class", data = null, sel = null;
+
+function parseCSV(t){
+  t = t.replace(/^﻿/,"");
+  const rows=[]; let row=[], f="", q=false;
+  for(let i=0;i<t.length;i++){
+    const c=t[i];
+    if(q){ if(c=='"'){ if(t[i+1]=='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c=='"') q=true;
+    else if(c==','){ row.push(f); f=""; }
+    else if(c=='\n'||c=='\r'){ if(c=='\r'&&t[i+1]=='\n') i++; row.push(f); rows.push(row); row=[]; f=""; }
+    else f+=c;
+  }
+  if(f!==""||row.length){ row.push(f); rows.push(row); }
+  const head=(rows.shift()||[]).map(s=>s.trim());
+  const keep=head.map((h,i)=>i).filter(i=>head[i] && !/타임스탬프|timestamp/i.test(head[i]));
+  const cols=keep.map(i=>head[i]);
+  const recs=rows.map(r=>keep.map(i=>parseFloat(String(r[i]??"").replace(/[^0-9.\-]/g,""))))
+                 .filter(r=>r.every(v=>Number.isFinite(v)));
+  return {cols, recs};
+}
+
+function nice(lo,hi){
+  if(lo===hi){lo-=1;hi+=1;}
+  const span=hi-lo, pad=span*0.08;
+  return [lo-pad, hi+pad];
+}
+function ticks(lo,hi,n){
+  const raw=(hi-lo)/n, p=Math.pow(10,Math.floor(Math.log10(raw)));
+  const step=[1,2,5,10].map(m=>m*p).find(s=>s>=raw);
+  const out=[]; for(let v=Math.ceil(lo/step)*step; v<=hi+1e-9; v+=step) out.push(+v.toFixed(6));
+  return out;
+}
+const mean=a=>a.reduce((s,v)=>s+v,0)/a.length;
+const fmt=v=>Math.abs(v)>=20?Math.round(v):Math.round(v*10)/10;
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+
+function drawMatrix(){
+  const svg=document.getElementById("mx"); svg.innerHTML="";
+  const {cols,recs}=data, n=cols.length;
+  const W=svg.clientWidth||360, gap=4, cs=(W-gap*(n-1))/n;
+  svg.setAttribute("height",W); svg.setAttribute("viewBox",`0 0 ${W} ${W}`);
+  const ranges=cols.map((c,i)=>nice(Math.min(...recs.map(r=>r[i])),Math.max(...recs.map(r=>r[i]))));
+  const r=Math.max(1.6,Math.min(3.2,cs/28));
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){
+    const x0=j*(cs+gap), y0=i*(cs+gap);
+    const g=el("g",{class:i===j?"":"cell",transform:`translate(${x0},${y0})`},svg);
+    el("rect",{class:"bgc",width:cs,height:cs,rx:6,fill:i===j?"#EEF0F4":"#FAFAF7",stroke:"#DDDCD2"},g);
+    if(i===j){
+      const t=el("text",{x:cs/2,y:cs/2-2,"text-anchor":"middle","font-size":Math.max(10,Math.min(14,cs/7)),"font-weight":700,fill:"#1E2A44"},g);
+      t.textContent=cols[i];
+      const m=el("text",{x:cs/2,y:cs/2+Math.max(12,cs/6),"text-anchor":"middle","font-size":Math.max(9,Math.min(12,cs/9)),fill:"#5A6378"},g);
+      m.textContent="평균 "+fmt(mean(recs.map(r=>r[i])));
+      continue;
+    }
+    const [xl,xh]=ranges[j],[yl,yh]=ranges[i];
+    for(const rec of recs){
+      el("circle",{cx:((rec[j]-xl)/(xh-xl))*cs, cy:cs-((rec[i]-yl)/(yh-yl))*cs, r, fill:"#2F6FA8","fill-opacity":0.6},g);
+    }
+    g.addEventListener("click",()=>{sel=[j,i];drawDetail();document.getElementById("detail").scrollIntoView({behavior:"smooth",block:"start"});});
+  }
+}
+
+function drawDetail(){
+  if(!sel||!data) return;
+  const [xi,yi]=sel, {cols,recs}=data;
+  document.getElementById("detail").hidden=false;
+  document.getElementById("dTitle").textContent=`가로: ${cols[xi]}  ·  세로: ${cols[yi]}`;
+  const svg=document.getElementById("big"); svg.innerHTML="";
+  const W=svg.clientWidth||340, H=Math.round(W*0.8), L=44, B=34, T=10, R=12;
+  svg.setAttribute("height",H); svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const [xl,xh]=nice(Math.min(...recs.map(r=>r[xi])),Math.max(...recs.map(r=>r[xi])));
+  const [yl,yh]=nice(Math.min(...recs.map(r=>r[yi])),Math.max(...recs.map(r=>r[yi])));
+  const X=v=>L+((v-xl)/(xh-xl))*(W-L-R), Y=v=>T+(1-(v-yl)/(yh-yl))*(H-T-B);
+  for(const t of ticks(xl,xh,5)){ el("line",{x1:X(t),x2:X(t),y1:T,y2:H-B,stroke:"#ECEBE4"},svg); const s=el("text",{x:X(t),y:H-B+18,"text-anchor":"middle","font-size":12,fill:"#5A6378"},svg); s.textContent=t; }
+  for(const t of ticks(yl,yh,5)){ el("line",{x1:L,x2:W-R,y1:Y(t),y2:Y(t),stroke:"#ECEBE4"},svg); const s=el("text",{x:L-6,y:Y(t)+4,"text-anchor":"end","font-size":12,fill:"#5A6378"},svg); s.textContent=t; }
+  el("line",{x1:L,x2:W-R,y1:H-B,y2:H-B,stroke:"#9AA3B5"},svg);
+  el("line",{x1:L,x2:L,y1:T,y2:H-B,stroke:"#9AA3B5"},svg);
+  const big=document.getElementById("bubble").checked;
+  const cnt=new Map(); for(const r of recs){const k=r[xi]+"|"+r[yi]; cnt.set(k,(cnt.get(k)||0)+1);}
+  let maxc=0; cnt.forEach(v=>{if(v>maxc)maxc=v;});
+  if(big){
+    cnt.forEach((c,k)=>{const [a,b]=k.split("|").map(Number); el("circle",{cx:X(a),cy:Y(b),r:4+Math.sqrt(c)*4,fill:"#2F6FA8","fill-opacity":0.55,stroke:"#1E2A44","stroke-opacity":.25},svg);});
+  } else {
+    for(const r of recs) el("circle",{cx:X(r[xi]),cy:Y(r[yi]),r:5,fill:"#2F6FA8","fill-opacity":0.6},svg);
+  }
+  document.getElementById("dNote").textContent = maxc>1
+    ? `같은 자리에 겹친 점이 있어요. 한 자리에 가장 많이 겹친 사람: ${maxc}명`
+    : "겹친 점은 없어요.";
+}
+
+function render(){
+  const meta=document.getElementById("meta");
+  meta.textContent = `${mode==="class"?"우리 반":"연습용 200명 (가상 데이터)"} · ${data.recs.length}명 · ${new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})} 기준`;
+  drawMatrix(); drawDetail();
+}
+function showMsg(t){document.getElementById("msg").innerHTML=t?`<div class="msg">${t}</div>`:"";}
+
+async function load(){
+  showMsg("");
+  if(mode==="practice"){ data=parseCSV(PRACTICE); render(); return; }
+  if(!SRC){ showMsg("우리 반 시트 주소가 아직 연결되지 않았어요. 지금은 연습용 200명을 보여 줄게요."); mode="practice"; setBtns(); data=parseCSV(PRACTICE); render(); return; }
+  document.getElementById("meta").textContent="우리 반 답을 불러오는 중…";
+  try{
+    const res=await fetch(SRC+(SRC.includes("?")?"&":"?")+"t="+Date.now(),{cache:"no-store"});
+    if(!res.ok) throw new Error(res.status);
+    const d=parseCSV(await res.text());
+    if(d.recs.length<2){ showMsg("아직 답이 2명보다 적어요. 잠시 뒤 [새로고침]을 눌러 주세요."); }
+    if(d.recs.length===0){ data={cols:d.cols.length?d.cols:parseCSV(PRACTICE).cols,recs:[]}; document.getElementById("meta").textContent="우리 반 · 0명"; document.getElementById("mx").innerHTML=""; return; }
+    data=d; render();
+  }catch(e){
+    showMsg("우리 반 답을 불러오지 못했어요. 인터넷 연결을 확인하고 [새로고침]을 눌러 주세요.");
+  }
+}
+function setBtns(){document.getElementById("bClass").classList.toggle("on",mode==="class");document.getElementById("bPractice").classList.toggle("on",mode==="practice");}
+document.getElementById("bClass").onclick=()=>{mode="class";setBtns();sel=null;document.getElementById("detail").hidden=true;load();};
+document.getElementById("bPractice").onclick=()=>{mode="practice";setBtns();sel=null;document.getElementById("detail").hidden=true;load();};
+document.getElementById("bReload").onclick=load;
+document.getElementById("dClose").onclick=()=>{sel=null;document.getElementById("detail").hidden=true;};
+document.getElementById("bubble").onchange=drawDetail;
+let rt; addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(()=>data&&render(),150);});
+load();
+</script>
+</body>
+</html>
