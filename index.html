@@ -25,6 +25,10 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .tabs{display:flex;gap:0;margin:0 0 10px;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;width:max-content}
 .tabs button{border:0;border-radius:0;padding:9px 22px}
 .tabs button.on{background:var(--dot);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
+.chips button{padding:7px 12px;font-size:14px}
+.chips button.on{background:var(--dot);color:#fff;border-color:var(--dot)}
+#bMean.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .tbl{max-height:62vh;overflow:auto;border-radius:12px}
 table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
 th,td{padding:7px 5px;text-align:right;border-bottom:1px solid #ECEBE4;white-space:nowrap}
@@ -54,9 +58,15 @@ input[type=checkbox]{width:20px;height:20px}
   </div>
   <p class="meta" id="meta">불러오는 중…</p>
   <div id="msg"></div>
-  <div class="tabs" role="tablist"><button id="tTable" class="on">표</button><button id="tChart">그래프</button></div>
+  <div class="bar"><div class="tabs" role="tablist" style="margin:0"><button id="tTable" class="on">표</button><button id="tBar">막대</button><button id="tChart">점 그래프</button></div>
+  <button id="bMean" aria-pressed="false">평균 보기</button></div>
   <div id="tableView"><div class="card tbl"><table id="tbl"></table></div>
-  <p class="hint">한 줄이 한 사람의 답이에요. 맨 아래 줄은 평균이에요. 다 봤으면 [그래프]를 눌러요.</p></div>
+  <p class="hint">한 줄이 한 사람의 답이에요. 숫자만 보고 가장 많은 답을 찾을 수 있나요? 다 봤으면 [막대]를 눌러요.</p></div>
+  <div id="barView" hidden>
+  <div class="chips" id="qChips"></div>
+  <div class="card"><svg id="bars" width="100%" role="img" aria-label="막대그래프"></svg></div>
+  <p class="hint" id="barNote"></p>
+  </div>
   <div id="chartView" hidden>
   <div class="card"><svg id="mx" width="100%" role="img" aria-label="산점도 행렬"></svg></div>
   <p class="hint">칸을 누르면 그 두 질문만 크게 볼 수 있어요. 점 하나가 한 사람이에요.</p>
@@ -335,8 +345,9 @@ function drawMatrix(){
     if(i===j){
       const t=el("text",{x:cs/2,y:cs/2-2,"text-anchor":"middle","font-size":Math.max(10,Math.min(14,cs/7)),"font-weight":700,fill:"#1E2A44"},g);
       t.textContent=cols[i];
-      const m=el("text",{x:cs/2,y:cs/2+Math.max(12,cs/6),"text-anchor":"middle","font-size":Math.max(9,Math.min(12,cs/9)),fill:"#5A6378"},g);
-      m.textContent="평균 "+fmt(mean(recs.map(r=>r[i])));
+      if(!showMean){ t.setAttribute("y",cs/2+5); }
+      else { const m=el("text",{x:cs/2,y:cs/2+Math.max(12,cs/6),"text-anchor":"middle","font-size":Math.max(9,Math.min(12,cs/9)),fill:"#B8521C","font-weight":700},g);
+      m.textContent="평균 "+fmt(mean(recs.map(r=>r[i]))); }
       continue;
     }
     const [xl,xh]=ranges[j],[yl,yh]=ranges[i];
@@ -379,23 +390,68 @@ function drawTable(){
   const {cols,recs}=data, tb=document.getElementById("tbl");
   let h='<thead><tr><th class="n">#</th>'+cols.map(c=>'<th>'+c.replace('(','<br>(')+'</th>').join('')+'</tr></thead><tbody>';
   recs.forEach((r,i)=>{h+='<tr><td class="n">'+(i+1)+'</td>'+r.map(v=>'<td>'+v+'</td>').join('')+'</tr>';});
-  if(recs.length) h+='<tr class="avg"><td class="n">평균</td>'+cols.map((c,i)=>'<td>'+fmt(mean(recs.map(r=>r[i])))+'</td>').join('')+'</tr>';
+  if(recs.length&&showMean) h+='<tr class="avg"><td class="n">평균</td>'+cols.map((c,i)=>'<td>'+fmt(mean(recs.map(r=>r[i])))+'</td>').join('')+'</tr>';
   tb.innerHTML=h+'</tbody>';
 }
-let view="table";
+let view="table", showMean=false, barQ=0;
+function bins(vals){
+  const ints=vals.every(v=>Number.isInteger(v)), lo=Math.min(...vals), hi=Math.max(...vals);
+  if(ints && hi-lo<=9){ const out=[]; const a=(lo>=1&&hi<=5)?1:lo, z=(lo>=1&&hi<=5)?5:hi; for(let v=a;v<=z;v++) out.push({lo:v,hi:v+1,label:String(v)}); return out; }
+  const steps=[0.5,1,2,5,10,15,20,30,50,60,100,120,200,300,500];
+  const step=steps.find(s=>(hi-lo)/s<=8)||1000;
+  const out=[]; for(let v=Math.floor(lo/step)*step; v<=hi; v=+(v+step).toFixed(6)) out.push({lo:v,hi:+(v+step).toFixed(6),label:(ints&&step===1)?String(v):v+"~"});
+  return out;
+}
+function drawBars(){
+  if(!data||!data.recs.length){document.getElementById("bars").innerHTML="";return;}
+  const {cols,recs}=data;
+  const ch=document.getElementById("qChips"); ch.innerHTML="";
+  cols.forEach((c,i)=>{const b=document.createElement("button");b.textContent=c;if(i===barQ)b.className="on";b.onclick=()=>{barQ=i;drawBars();};ch.appendChild(b);});
+  const vals=recs.map(r=>r[barQ]), bs=bins(vals);
+  bs.forEach(b=>b.n=vals.filter(v=>v>=b.lo&&v<b.hi).length);
+  const max=Math.max(...bs.map(b=>b.n));
+  const svg=document.getElementById("bars"); svg.innerHTML="";
+  const W=svg.clientWidth||340, H=Math.round(W*0.75), L=8, R=8, T=44, B=40;
+  svg.setAttribute("height",H); svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const bw=(W-L-R)/bs.length, Y=n=>T+(1-n/max)*(H-T-B);
+  el("line",{x1:L,x2:W-R,y1:H-B,y2:H-B,stroke:"#9AA3B5","stroke-width":2},svg);
+  bs.forEach((b,k)=>{
+    const x=L+k*bw+bw*0.12, w=bw*0.76;
+    if(b.n) el("rect",{x,y:Y(b.n),width:w,height:H-B-Y(b.n),rx:4,fill:b.n===max?"#D9662B":"#9DBBD8"},svg);
+    if(b.n){const c=el("text",{x:x+w/2,y:Y(b.n)-6,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#1E2A44"},svg);c.textContent=b.n+"명";}
+    const l=el("text",{x:x+w/2,y:H-B+18,"text-anchor":"middle","font-size":Math.min(13,bw/3.2),fill:"#5A6378"},svg);l.textContent=b.label;
+  });
+  const top=bs.filter(b=>b.n===max).map(b=>b.label).join(", ");
+  let note=`가장 많은 답: ${top} (${max}명). 주황 막대예요.`;
+  if(showMean){
+    const m=mean(vals), first=bs[0].lo, last=bs[bs.length-1].hi;
+    const cat=bs.every(b=>b.hi-b.lo===1&&b.label===String(b.lo));
+    const xm=cat? L+(m-first+0.5)*bw : L+((m-first)/(last-first))*(W-L-R);
+    el("line",{x1:xm,x2:xm,y1:22,y2:H-B,stroke:"#B8521C","stroke-width":3,"stroke-dasharray":"7 5"},svg);
+    const tx=el("text",{x:Math.min(Math.max(xm,40),W-40),y:16,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#B8521C"},svg); tx.textContent="평균 "+fmt(m);
+    note+=` 점선이 평균(${fmt(m)})이에요.`;
+  }
+  document.getElementById("barNote").textContent=note;
+}
 function setView(v){view=v;
-  document.getElementById("tTable").classList.toggle("on",v==="table");
-  document.getElementById("tChart").classList.toggle("on",v==="chart");
+  for(const [id,k] of [["tTable","table"],["tBar","bar"],["tChart","chart"]]) document.getElementById(id).classList.toggle("on",v===k);
   document.getElementById("tableView").hidden=v!=="table";
+  document.getElementById("barView").hidden=v!=="bar";
   document.getElementById("chartView").hidden=v!=="chart";
-  if(v==="chart"&&data) {drawMatrix();drawDetail();}
+  if(!data) return;
+  if(v==="bar") drawBars();
+  if(v==="chart"){drawMatrix();drawDetail();}
 }
 document.getElementById("tTable").onclick=()=>setView("table");
+document.getElementById("tBar").onclick=()=>setView("bar");
 document.getElementById("tChart").onclick=()=>setView("chart");
+document.getElementById("bMean").onclick=()=>{showMean=!showMean;
+  const b=document.getElementById("bMean"); b.classList.toggle("on",showMean); b.setAttribute("aria-pressed",showMean); b.textContent=showMean?"평균 끄기":"평균 보기";
+  if(data){drawTable(); if(view==="bar")drawBars(); if(view==="chart"){drawMatrix();drawDetail();}}};
 function render(){
   const meta=document.getElementById("meta");
   meta.textContent = `${mode==="class"?"우리 반":"연습용 200명 (가상 데이터)"} · ${data.recs.length}명 · ${new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})} 기준`;
-  drawTable(); if(view==="chart"){drawMatrix(); drawDetail();}
+  drawTable(); if(view==="bar")drawBars(); if(view==="chart"){drawMatrix(); drawDetail();}
 }
 function showMsg(t){document.getElementById("msg").innerHTML=t?`<div class="msg">${t}</div>`:"";}
 
