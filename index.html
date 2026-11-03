@@ -22,6 +22,15 @@ button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .meta{font-size:14px;color:var(--soft);margin:0 0 10px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px}
+.tabs{display:flex;gap:0;margin:0 0 10px;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;width:max-content}
+.tabs button{border:0;border-radius:0;padding:9px 22px}
+.tabs button.on{background:var(--dot);color:#fff}
+.tbl{max-height:62vh;overflow:auto;border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 5px;text-align:right;border-bottom:1px solid #ECEBE4;white-space:nowrap}
+th{position:sticky;top:0;background:#EEF0F4;font-weight:700;text-align:center;white-space:normal;line-height:1.25;font-size:13px}
+td.n,th.n{color:var(--soft);text-align:center;width:2.5em}
+tr.avg td{background:#FFF4EC;font-weight:700;border-top:2px solid #F2C9AE}
 .hint{font-size:15px;color:var(--soft);margin:12px 2px}
 svg text{font-family:inherit}
 .cell{cursor:pointer}
@@ -45,6 +54,10 @@ input[type=checkbox]{width:20px;height:20px}
   </div>
   <p class="meta" id="meta">불러오는 중…</p>
   <div id="msg"></div>
+  <div class="tabs" role="tablist"><button id="tTable" class="on">표</button><button id="tChart">그래프</button></div>
+  <div id="tableView"><div class="card tbl"><table id="tbl"></table></div>
+  <p class="hint">한 줄이 한 사람의 답이에요. 맨 아래 줄은 평균이에요. 다 봤으면 [그래프]를 눌러요.</p></div>
+  <div id="chartView" hidden>
   <div class="card"><svg id="mx" width="100%" role="img" aria-label="산점도 행렬"></svg></div>
   <p class="hint">칸을 누르면 그 두 질문만 크게 볼 수 있어요. 점 하나가 한 사람이에요.</p>
   <div id="detail" hidden>
@@ -54,6 +67,7 @@ input[type=checkbox]{width:20px;height:20px}
       <svg id="big" width="100%" role="img" aria-label="점 그래프"></svg>
       <p class="meta" id="dNote"></p>
     </div>
+  </div>
   </div>
 </div>
 <script>
@@ -361,10 +375,27 @@ function drawDetail(){
     : "겹친 점은 없어요.";
 }
 
+function drawTable(){
+  const {cols,recs}=data, tb=document.getElementById("tbl");
+  let h='<thead><tr><th class="n">#</th>'+cols.map(c=>'<th>'+c.replace('(','<br>(')+'</th>').join('')+'</tr></thead><tbody>';
+  recs.forEach((r,i)=>{h+='<tr><td class="n">'+(i+1)+'</td>'+r.map(v=>'<td>'+v+'</td>').join('')+'</tr>';});
+  if(recs.length) h+='<tr class="avg"><td class="n">평균</td>'+cols.map((c,i)=>'<td>'+fmt(mean(recs.map(r=>r[i])))+'</td>').join('')+'</tr>';
+  tb.innerHTML=h+'</tbody>';
+}
+let view="table";
+function setView(v){view=v;
+  document.getElementById("tTable").classList.toggle("on",v==="table");
+  document.getElementById("tChart").classList.toggle("on",v==="chart");
+  document.getElementById("tableView").hidden=v!=="table";
+  document.getElementById("chartView").hidden=v!=="chart";
+  if(v==="chart"&&data) {drawMatrix();drawDetail();}
+}
+document.getElementById("tTable").onclick=()=>setView("table");
+document.getElementById("tChart").onclick=()=>setView("chart");
 function render(){
   const meta=document.getElementById("meta");
   meta.textContent = `${mode==="class"?"우리 반":"연습용 200명 (가상 데이터)"} · ${data.recs.length}명 · ${new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})} 기준`;
-  drawMatrix(); drawDetail();
+  drawTable(); if(view==="chart"){drawMatrix(); drawDetail();}
 }
 function showMsg(t){document.getElementById("msg").innerHTML=t?`<div class="msg">${t}</div>`:"";}
 
@@ -378,7 +409,7 @@ async function load(){
     if(!res.ok) throw new Error(res.status);
     const d=parseCSV(await res.text());
     if(d.recs.length<2){ showMsg("아직 답이 2명보다 적어요. 잠시 뒤 [새로고침]을 눌러 주세요."); }
-    if(d.recs.length===0){ data={cols:d.cols.length?d.cols:parseCSV(PRACTICE).cols,recs:[]}; document.getElementById("meta").textContent="우리 반 · 0명"; document.getElementById("mx").innerHTML=""; return; }
+    if(d.recs.length===0){ data={cols:d.cols.length?d.cols:parseCSV(PRACTICE).cols,recs:[]}; document.getElementById("meta").textContent="우리 반 · 0명"; document.getElementById("mx").innerHTML=""; drawTable(); return; }
     data=d; render();
   }catch(e){
     showMsg("우리 반 답을 불러오지 못했어요. 인터넷 연결을 확인하고 [새로고침]을 눌러 주세요.");
